@@ -1,0 +1,32 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Domain\Operations\Enums;
+
+/**
+ * Ciclo principal da ocorrência (normalização do status numérico legado).
+ *
+ * @see docs/migracao/regras-negocio.md
+ */
+enum IncidentStatus: string
+{
+    case Open = 'open';
+    case Dispatched = 'dispatched';
+    case InProgress = 'in_progress';
+    case Closed = 'closed';
+    case Qta = 'qta';
+    case Cancelled = 'cancelled';
+
+    public function label(): string
+    {
+        return match ($this) {
+            self::Open => 'Aberta',
+            self::Dispatched => 'Despachada',
+            self::InProgress => 'Em atendimento',
+            self::Closed => 'Encerrada',
+            self::Qta => 'QTA',
+            self::Cancelled => 'Cancelada',
+        };
+    }
+}

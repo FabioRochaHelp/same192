@@ -1,0 +1,125 @@
+@php
+    use App\Support\Operations\TimelineEventLabels;
+@endphp
+
+<div class="cco-page-gap" wire:poll.30s="refreshOperationalState">
+    <div class="flex flex-wrap items-center gap-3">
+        <flux:button variant="ghost" icon="arrow-left" :href="route('operations.dispatch')" wire:navigate>{{ __('Voltar ao CCO') }}</flux:button>
+        <flux:button variant="ghost" icon="rectangle-stack" :href="route('operations.incidents.index')" wire:navigate>{{ __('Lista de ocorrências') }}</flux:button>
+    </div>
+
+    <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+            <flux:heading size="xl" class="tabular-nums">
+                {{ __('Ocorrência') }} #{{ $incident->talao }}/{{ $incident->dispatch_year }}
+            </flux:heading>
+            <flux:text class="mt-1">{{ $incident->occurred_at->format('d/m/Y H:i:s') }}</flux:text>
+        </div>
+        <flux:badge color="blue" size="lg">{{ $incident->status->label() }}</flux:badge>
+    </div>
+
+    <div class="grid gap-4 lg:grid-cols-3">
+        <flux:card class="space-y-2 lg:col-span-2">
+            <flux:subheading>{{ __('Endereço e referência') }}</flux:subheading>
+            <flux:text>{{ trim(implode(', ', array_filter([$incident->address_line, $incident->number, $incident->district, $incident->city]))) ?: '—' }}</flux:text>
+            @if ($incident->reference_notes)
+                <flux:text size="sm" class="text-zinc-600 dark:text-zinc-400">{{ $incident->reference_notes }}</flux:text>
+            @endif
+            @if ($incident->latitude && $incident->longitude)
+                <flux:text size="sm" class="font-mono text-zinc-500">{{ $incident->latitude }}, {{ $incident->longitude }}</flux:text>
+            @endif
+        </flux:card>
+        <flux:card class="space-y-2">
+            <flux:subheading>{{ __('Natureza e solicitante') }}</flux:subheading>
+            <flux:text>{{ $incident->nature?->name ?? '—' }}</flux:text>
+            <flux:text size="sm">{{ $incident->caller_name ?? '—' }} · {{ $incident->caller_phone ?? '—' }}</flux:text>
+        </flux:card>
+    </div>
+
+    @if ($incident->description)
+        <flux:card>
+            <flux:subheading>{{ __('Descrição') }}</flux:subheading>
+            <flux:text>{{ $incident->description }}</flux:text>
+        </flux:card>
+    @endif
+
+    @if ($activeDispatch)
+        <flux:card class="border-s-4 border-s-blue-500 dark:border-s-blue-400">
+            <flux:subheading>{{ __('Despacho ativo') }}</flux:subheading>
+            <div class="mt-2 flex flex-wrap gap-4">
+                <flux:text>
+                    <span class="font-medium">{{ __('Etapa') }}:</span>
+                    {{ $activeDispatch->stage->label() }}
+                </flux:text>
+                @if ($activeDispatch->shift?->vehicle)
+                    <flux:text>
+                        <span class="font-medium">{{ __('Viatura') }}:</span>
+                        {{ $activeDispatch->shift->vehicle->prefix }} · {{ $activeDispatch->shift->vehicle->plate ?? __('Sem placa') }}
+                    </flux:text>
+                @endif
+            </div>
+            @if ($activeDispatch->shift?->vehicle?->device_id)
+                <flux:text size="sm" class="mt-2 font-mono text-zinc-500">Device ID: {{ $activeDispatch->shift->vehicle->device_id }}</flux:text>
+            @endif
+        </flux:card>
+    @endif
+
+    <flux:card>
+        <flux:subheading class="mb-4">{{ __('Marcos horários operacionais') }}</flux:subheading>
+        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            @foreach ([
+                ['label' => __('Empenho'), 'value' => $incident->dispatched_at],
+                ['label' => __('Saída da base (QTI)'), 'value' => $incident->departed_base_at],
+                ['label' => __('Chegada ao local'), 'value' => $incident->arrived_scene_at],
+                ['label' => __('Saída do local'), 'value' => $incident->left_scene_at],
+                ['label' => __('Chegada na US'), 'value' => $incident->arrived_hospital_at],
+                ['label' => __('Saída da US'), 'value' => $incident->released_hospital_at],
+                ['label' => __('Retorno à base'), 'value' => $incident->returned_base_at],
+            ] as $row)
+                <div class="rounded-lg border border-zinc-200 px-3 py-2 dark:border-zinc-700">
+                    <flux:text size="sm" class="text-zinc-500">{{ $row['label'] }}</flux:text>
+                    <flux:text class="tabular-nums">{{ $row['value']?->format('d/m H:i:s') ?? '—' }}</flux:text>
+                </div>
+            @endforeach
+        </div>
+    </flux:card>
+
+    <div class="grid gap-4 xl:grid-cols-2">
+        <flux:card class="relative flex min-h-[16rem] flex-col justify-center">
+            <flux:subheading class="mb-2">{{ __('Mapa da ocorrência') }}</flux:subheading>
+            <flux:text size="sm" class="mb-4 text-zinc-600 dark:text-zinc-400">
+                {{ __('Rota e markers — Leaflet + Traccar quando device_id e intervalo estiverem completos.') }}
+            </flux:text>
+            <div
+                class="flex flex-1 flex-col items-center justify-center rounded-xl border-2 border-dashed border-zinc-300 bg-zinc-50/50 dark:border-zinc-600 dark:bg-zinc-900/30"
+            >
+                <flux:icon.map class="size-10 text-zinc-400" />
+                <flux:text class="mt-2 text-zinc-500">{{ __('Camada de mapa') }}</flux:text>
+            </div>
+        </flux:card>
+
+        <flux:card>
+            <flux:subheading class="mb-4">{{ __('Timeline auditável') }}</flux:subheading>
+            @if ($incident->timelineEvents->isEmpty())
+                <flux:text size="sm">{{ __('Sem eventos.') }}</flux:text>
+            @else
+                <ul class="max-h-[28rem] space-y-4 overflow-y-auto pe-1">
+                    @foreach ($incident->timelineEvents as $event)
+                        <li wire:key="det-tl-{{ $event->id }}" class="border-s-2 border-zinc-300 ps-3 dark:border-zinc-600">
+                            <div class="flex flex-wrap items-baseline justify-between gap-2">
+                                <flux:text class="font-medium">{{ TimelineEventLabels::for($event->event_key) }}</flux:text>
+                                <flux:text size="sm" class="tabular-nums text-zinc-500">{{ $event->recorded_at->format('d/m/Y H:i:s') }}</flux:text>
+                            </div>
+                            @if ($event->payload)
+                                <pre class="mt-2 max-h-32 overflow-auto rounded-lg bg-zinc-100 p-2 font-mono text-xs dark:bg-zinc-900">{{ json_encode($event->payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) }}</pre>
+                            @endif
+                            @if ($event->actor)
+                                <flux:text size="sm" class="text-zinc-500">{{ __('Operador') }}: {{ $event->actor->name }}</flux:text>
+                            @endif
+                        </li>
+                    @endforeach
+                </ul>
+            @endif
+        </flux:card>
+    </div>
+</div>
