@@ -24,8 +24,7 @@ test('operational user can create incident without municipio link at creation', 
         ->set('nature_id', $nature->id)
         ->set('description', 'Ocorrência de teste')
         ->set('caller_phone', '11987654321')
-        ->set('patient_call_type', 'N')
-        ->call('save')
+        ->call('saveWithCallType', 'N')
         ->assertHasNoErrors()
         ->assertRedirect();
 

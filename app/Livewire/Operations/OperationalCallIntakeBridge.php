@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Livewire\Operations;
 
+use App\Support\Operations\IncidentPhoneNormalizer;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\On;
@@ -30,14 +31,14 @@ final class OperationalCallIntakeBridge extends Component
 
     #[On('operational-call-intake')]
     public function openOperationalCallIntakeFromBroadcast(
-        ?string $form_url = null,
-        ?string $phone = null,
-        ?string $expires_at = null,
-        ?string $caller_name = null,
-        ?string $latitude = null,
-        ?string $longitude = null,
-        ?string $call_received_at = null,
-        ?string $external_reference = null,
+        mixed $form_url = null,
+        mixed $phone = null,
+        mixed $expires_at = null,
+        mixed $caller_name = null,
+        mixed $latitude = null,
+        mixed $longitude = null,
+        mixed $call_received_at = null,
+        mixed $external_reference = null,
     ): void {
         $user = Auth::user();
         if ($user === null || ! $user->hasOperationalAbility('incident.create')) {
@@ -45,14 +46,14 @@ final class OperationalCallIntakeBridge extends Component
         }
 
         $this->callIntakePrefill = [
-            'form_url' => $form_url ?? '',
-            'phone' => $phone ?? '',
-            'expires_at' => $expires_at ?? '',
-            'caller_name' => $caller_name,
-            'latitude' => $latitude,
-            'longitude' => $longitude,
-            'call_received_at' => $call_received_at,
-            'external_reference' => $external_reference,
+            'form_url' => self::stringFromMixed($form_url),
+            'phone' => self::incomingPhoneDigits($phone),
+            'expires_at' => self::stringFromMixed($expires_at),
+            'caller_name' => self::nullableTrimmedString($caller_name),
+            'latitude' => self::coordToPrefillScalar($latitude),
+            'longitude' => self::coordToPrefillScalar($longitude),
+            'call_received_at' => self::nullableTrimmedString($call_received_at),
+            'external_reference' => self::nullableTrimmedString($external_reference),
         ];
         $this->callIntakeRenderKey++;
         $this->showCallIntakeModal = true;
@@ -68,5 +69,62 @@ final class OperationalCallIntakeBridge extends Component
     public function render(): View
     {
         return view('livewire.operations.operational-call-intake-bridge');
+    }
+
+    private static function stringFromMixed(mixed $value): string
+    {
+        if ($value === null || $value === '') {
+            return '';
+        }
+
+        return is_string($value) ? $value : (string) $value;
+    }
+
+    private static function nullableTrimmedString(mixed $value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        $s = trim(is_string($value) ? $value : (string) $value);
+
+        return $s === '' ? null : $s;
+    }
+
+    /** Echo pode mandar `phone` como número; com strict_types, `?string` quebrava o listener inteiro. */
+    private static function incomingPhoneDigits(mixed $phone): string
+    {
+        if ($phone === null || $phone === '') {
+            return '';
+        }
+        if (is_string($phone)) {
+            return IncidentPhoneNormalizer::normalize($phone);
+        }
+        if (is_int($phone)) {
+            return IncidentPhoneNormalizer::normalize((string) $phone);
+        }
+        if (is_float($phone)) {
+            return IncidentPhoneNormalizer::normalize(sprintf('%.0f', $phone));
+        }
+
+        return '';
+    }
+
+    /** Echo/Reverb pode entregar latitude/longitude como número no JSON. */
+    private static function coordToPrefillScalar(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+        if (is_string($value)) {
+            $t = trim($value);
+
+            return $t === '' ? null : $t;
+        }
+        if (is_int($value) || is_float($value)) {
+            return (string) $value;
+        }
+
+        return null;
     }
 }

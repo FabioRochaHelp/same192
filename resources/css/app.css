@@ -303,3 +303,8 @@ select:focus[data-flux-control] {
 .cco-kanban-card {
     @apply rounded-lg border border-slate-200/95 bg-white/90 p-3 text-sm shadow-sm shadow-slate-900/10 backdrop-blur-sm transition hover:border-cyan-500/35 dark:border-slate-700/60 dark:bg-slate-900/65 dark:shadow-md dark:shadow-black/25 dark:hover:border-cyan-500/25;
 }
+
+.incident-osm-host .leaflet-container {
+    z-index: 0;
+    font-family: inherit;
+}

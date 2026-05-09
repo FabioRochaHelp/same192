@@ -10,9 +10,11 @@ use App\Domain\Operations\Enums\CallType;
 use App\Models\Incident;
 use App\Models\Nature;
 use App\Support\Operations\IncidentPhoneNormalizer;
+use App\Support\Operations\OpenStreetMapGeocoder;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
@@ -28,7 +30,11 @@ final class IncidentCreate extends Component
 {
     public string $occurred_at = '';
 
-    public ?string $call_received_at = '';
+    /** Só hidratação (webhook → modal): mescla em `occurred_at`, não aparece no formulário. */
+    public string $call_received_at = '';
+
+    /** Busca Nominatim para localização no mapa (livre). */
+    public string $addressGeocodeQuery = '';
 
     public ?int $nature_id = null;
 
@@ -46,7 +52,7 @@ final class IncidentCreate extends Component
 
     public ?string $caller_name = '';
 
-    public ?string $caller_phone = '';
+    public string $caller_phone = '';
 
     public ?string $patient_name = '';
 
@@ -54,6 +60,7 @@ final class IncidentCreate extends Component
 
     public ?string $patient_sex = '';
 
+    /** Preenchido apenas ao clicar num botão de tipo de chamada (persistência). */
     public string $patient_call_type = 'N';
 
     public ?int $expected_victim_total = null;
@@ -137,7 +144,7 @@ final class IncidentCreate extends Component
         }
         if (! empty($query['received_at'])) {
             try {
-                $this->call_received_at = CarbonImmutable::parse((string) $query['received_at'])->format('Y-m-d\TH:i');
+                $this->occurred_at = CarbonImmutable::parse((string) $query['received_at'])->format('Y-m-d\TH:i');
             } catch (Throwable) {
                 //
             }
@@ -145,6 +152,10 @@ final class IncidentCreate extends Component
         if (! empty($query['ref'])) {
             $this->reference_notes = (string) $query['ref'];
         }
+
+        $this->normalizeCoordinateProps();
+        $this->enrichAddressFromCoordinatesIfNeeded();
+        $this->dispatchIncidentOsmInvalidateDelayed();
     }
 
     /** @param  array<string, mixed>  $intake */
@@ -157,21 +168,115 @@ final class IncidentCreate extends Component
 
     private function hydrateEmbeddedPrefillFromProps(): void
     {
-        $this->caller_phone = IncidentPhoneNormalizer::normalize((string) ($this->caller_phone ?? ''));
+        $this->caller_phone = IncidentPhoneNormalizer::normalize($this->caller_phone);
 
-        if ($this->call_received_at !== null && $this->call_received_at !== '') {
+        if ($this->call_received_at !== '') {
             try {
-                $this->call_received_at = CarbonImmutable::parse((string) $this->call_received_at)->format('Y-m-d\TH:i');
+                $this->occurred_at = CarbonImmutable::parse((string) $this->call_received_at)->format('Y-m-d\TH:i');
             } catch (Throwable) {
-                $this->call_received_at = '';
+                //
             }
+            $this->call_received_at = '';
+        }
+
+        $this->normalizeCoordinateProps();
+        $this->enrichAddressFromCoordinatesIfNeeded();
+        $this->dispatchIncidentOsmInvalidateDelayed();
+    }
+
+    private function normalizeCoordinateProps(): void
+    {
+        foreach (['latitude', 'longitude'] as $prop) {
+            $raw = $this->{$prop};
+            if ($raw === null || $raw === '') {
+                $this->{$prop} = '';
+
+                continue;
+            }
+            $f = filter_var($raw, FILTER_VALIDATE_FLOAT);
+            $this->{$prop} = $f !== false ? (string) round((float) $f, 7) : '';
         }
     }
 
+    /** Quando o PBX envia só lat/lng, preenche logradouro/bairro/cidade via Nominatim (fora dos testes automatizados). */
+    private function enrichAddressFromCoordinatesIfNeeded(): void
+    {
+        if (App::runningUnitTests()) {
+            return;
+        }
+
+        $lat = filter_var($this->latitude, FILTER_VALIDATE_FLOAT);
+        $lng = filter_var($this->longitude, FILTER_VALIDATE_FLOAT);
+        if ($lat === false || $lng === false) {
+            return;
+        }
+
+        if (trim((string) ($this->address_line ?? '')) !== '') {
+            return;
+        }
+
+        try {
+            $hit = OpenStreetMapGeocoder::reverseLookup((float) $lat, (float) $lng);
+        } catch (Throwable) {
+            return;
+        }
+
+        $line = $hit['street_line'];
+        $this->address_line = $line ?? mb_substr($hit['display_name'], 0, 255);
+
+        if (trim((string) ($this->district ?? '')) === '' && ($hit['district'] ?? null) !== null && $hit['district'] !== '') {
+            $this->district = $hit['district'];
+        }
+        if (trim((string) ($this->city ?? '')) === '' && ($hit['city'] ?? null) !== null && $hit['city'] !== '') {
+            $this->city = $hit['city'];
+        }
+
+        if (trim((string) ($this->addressGeocodeQuery ?? '')) === '') {
+            $this->addressGeocodeQuery = mb_substr($hit['display_name'], 0, 400);
+        }
+    }
+
+    private function dispatchIncidentOsmInvalidateDelayed(): void
+    {
+        $lat = filter_var($this->latitude, FILTER_VALIDATE_FLOAT);
+        $lng = filter_var($this->longitude, FILTER_VALIDATE_FLOAT);
+        if ($lat === false || $lng === false) {
+            return;
+        }
+
+        $this->js('setTimeout(() => window.dispatchEvent(new CustomEvent("incident-osm-invalidate")), 120)');
+    }
+
+    public function geocodeAddressSearch(): void
+    {
+        $this->resetErrorBag('addressGeocodeQuery');
+
+        $this->validate([
+            'addressGeocodeQuery' => ['required', 'string', 'max:400'],
+        ], [], [
+            'addressGeocodeQuery' => __('Busca de endereço'),
+        ]);
+
+        try {
+            $hit = OpenStreetMapGeocoder::firstHit($this->addressGeocodeQuery);
+        } catch (Throwable) {
+            $this->addError('addressGeocodeQuery', __('Não foi possível localizar o endereço. Refine a busca (rua, bairro, cidade).'));
+
+            return;
+        }
+
+        $line = $hit['street_line'];
+        $this->address_line = $line ?? mb_substr($hit['display_name'], 0, 255);
+        $this->district = $hit['district'];
+        $this->city = $hit['city'];
+        $this->latitude = (string) round($hit['lat'], 7);
+        $this->longitude = (string) round($hit['lon'], 7);
+
+        $this->js('window.dispatchEvent(new CustomEvent("incident-osm-invalidate"))');
+    }
+
     /**
-     * Normaliza entradas vazias para nullable antes das regras (`date`, etc.).
-     *
-     * @param  array<string, mixed>  $attributes  Dados vindos das propriedades públicas do componente.
+     * @param  array<string, mixed>  $attributes
      * @return array<string, mixed>
      */
     protected function prepareForValidation($attributes)
@@ -183,18 +288,22 @@ final class IncidentCreate extends Component
             $natureId = (int) $natureId;
         }
 
-        $callReceivedAt = $attributes['call_received_at'] ?? null;
-
         $callerPhone = IncidentPhoneNormalizer::normalize((string) ($attributes['caller_phone'] ?? ''));
 
         return array_merge($attributes, [
-            'call_received_at' => ($callReceivedAt === '' || $callReceivedAt === null) ? null : $callReceivedAt,
             'caller_phone' => $callerPhone,
             'nature_id' => $natureId,
         ]);
     }
 
-    public function save(CreateOperationalIncidentAction $action): void
+    /** Persistência disparada pelos botões de tipo de chamada (C/T/A/N/U). */
+    public function saveWithCallType(string $code, CreateOperationalIncidentAction $action): void
+    {
+        $this->patient_call_type = $code;
+        $this->finalizeIncident($action);
+    }
+
+    private function finalizeIncident(CreateOperationalIncidentAction $action): void
     {
         $this->resetErrorBag();
 
@@ -221,7 +330,6 @@ final class IncidentCreate extends Component
 
         $validated = $this->validate([
             'occurred_at' => ['required', 'date'],
-            'call_received_at' => ['nullable', 'date'],
             'nature_id' => ['required', 'integer', Rule::exists('natures', 'id')],
             'description' => ['required', 'string', 'max:5000'],
             'address_line' => ['nullable', 'string', 'max:255'],
@@ -243,9 +351,6 @@ final class IncidentCreate extends Component
         ]);
 
         $occurred = CarbonImmutable::parse($validated['occurred_at']);
-        $callReceived = isset($validated['call_received_at']) && $validated['call_received_at']
-            ? CarbonImmutable::parse($validated['call_received_at'])
-            : null;
 
         $enumCallType = CallType::from($validated['patient_call_type']);
 
@@ -272,7 +377,7 @@ final class IncidentCreate extends Component
             isQta: $validated['is_qta'],
             totalDeathCount: $validated['total_death_count'],
             occurredAt: $occurred,
-            callReceivedAt: $callReceived,
+            callReceivedAt: $occurred,
         );
 
         try {
@@ -314,7 +419,7 @@ final class IncidentCreate extends Component
     {
         return view('livewire.operations.incident-create', [
             'natures' => Nature::query()->orderBy('name')->get(),
-            'callTypes' => CallType::cases(),
+            'callTypesForButtons' => CallType::orderedForIncidentForm(),
         ]);
     }
 

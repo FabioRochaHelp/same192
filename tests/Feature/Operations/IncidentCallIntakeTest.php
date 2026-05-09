@@ -76,8 +76,7 @@ test('guest can submit incident from signed webhook url without login', function
         ->set('nature_id', $nature->id)
         ->set('description', 'Paciente com dor torácica.')
         ->set('caller_phone', '11998877666')
-        ->set('patient_call_type', 'U')
-        ->call('save')
+        ->call('saveWithCallType', 'U')
         ->assertHasNoErrors()
         ->assertRedirect(route('operations.incidents.registered-guest'));
 
@@ -103,6 +102,16 @@ test('manual call start stores phone in session for create form', function (): v
         ->assertSee('1133334444', false);
 });
 
+test('operational bridge normalizes numeric phone from echo-shaped payload', function (): void {
+    /** @var User $central */
+    $central = User::query()->where('email', 'central@example.com')->firstOrFail();
+
+    Livewire::actingAs($central)
+        ->test(OperationalCallIntakeBridge::class)
+        ->call('openOperationalCallIntakeFromBroadcast', phone: 11_988_877_777)
+        ->assertSet('callIntakePrefill.phone', '11988877777');
+});
+
 test('operational bridge opens modal when receiving operational call intake payload', function (): void {
     /** @var User $central */
     $central = User::query()->where('email', 'central@example.com')->firstOrFail();
@@ -123,4 +132,17 @@ test('operational bridge opens modal when receiving operational call intake payl
         ->assertSet('showCallIntakeModal', true)
         ->assertSet('callIntakePrefill.phone', '11888877777')
         ->assertSet('callIntakePrefill.caller_name', 'João');
+});
+
+test('incident create embedded in modal receives caller phone from props', function (): void {
+    /** @var User $central */
+    $central = User::query()->where('email', 'central@example.com')->firstOrFail();
+
+    Livewire::actingAs($central)
+        ->test(IncidentCreate::class, [
+            'embeddedInModal' => true,
+            'caller_phone' => '11988776655',
+        ])
+        ->assertSet('caller_phone', '11988776655')
+        ->assertSet('embeddedInModal', true);
 });

@@ -16,7 +16,9 @@
     wire:model.self="showCallIntakeModal"
     wire:close="closeCallIntakeModal"
     variant="floating"
-    class="max-h-[92vh] w-full max-w-5xl overflow-y-auto"
+    :closable="false"
+    :dismissible="false"
+    class="max-h-[92vh] w-full max-w-[min(96rem,calc(100vw-1.5rem))] overflow-y-auto"
 >
     @if ($showCallIntakeModal)
         <div class="space-y-4">
@@ -43,15 +45,12 @@
                         </div>
                     @endif
                 </div>
-                <flux:modal.close>
-                    <flux:button variant="ghost" type="button">{{ __('Fechar') }}</flux:button>
-                </flux:modal.close>
             </div>
 
             <livewire:operations.incident-create
                 wire:key="call-intake-{{ $callIntakeRenderKey }}"
-                :embedded-in-modal="true"
-                :caller-phone="$callIntakePrefill['phone'] ?? ''"
+                embedded-in-modal="true"
+                caller-phone="{{ e($callIntakePrefill['phone'] ?? '') }}"
                 :caller-name="$callIntakePrefill['caller_name'] ?? ''"
                 :latitude="$callIntakePrefill['latitude'] ?? ''"
                 :longitude="$callIntakePrefill['longitude'] ?? ''"

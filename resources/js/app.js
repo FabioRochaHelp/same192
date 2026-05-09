@@ -1,5 +1,6 @@
 import Echo from 'laravel-echo';
 import Pusher from 'pusher-js';
+import './incident-osm.js';
 
 window.Pusher = Pusher;
 
@@ -40,13 +41,25 @@ function subscribeOperationalCallIntake() {
             return;
         }
 
+        const latRaw = payload?.latitude;
+        const lngRaw = payload?.longitude;
+        const phoneRaw = payload?.phone;
         Livewire.dispatch('operational-call-intake', {
             form_url: payload?.form_url ?? '',
-            phone: payload?.phone ?? '',
+            phone:
+                phoneRaw !== null && phoneRaw !== undefined && phoneRaw !== ''
+                    ? String(phoneRaw)
+                    : '',
             expires_at: payload?.expires_at ?? '',
             caller_name: payload?.caller_name ?? null,
-            latitude: payload?.latitude ?? null,
-            longitude: payload?.longitude ?? null,
+            latitude:
+                latRaw !== null && latRaw !== undefined && latRaw !== ''
+                    ? String(latRaw)
+                    : null,
+            longitude:
+                lngRaw !== null && lngRaw !== undefined && lngRaw !== ''
+                    ? String(lngRaw)
+                    : null,
             call_received_at: payload?.call_received_at ?? null,
             external_reference: payload?.external_reference ?? null,
         });

@@ -32,4 +32,16 @@ enum CallType: string
             self::Urgent => __('Urgente'),
         };
     }
+
+    /** Ordem dos botões no formulário: C, T, A, N, U (@see docs/migracao/regras-negocio.md). */
+    public static function orderedForIncidentForm(): array
+    {
+        return [
+            self::NotCompleted,
+            self::Hoax,
+            self::Administrative,
+            self::Normal,
+            self::Urgent,
+        ];
+    }
 }

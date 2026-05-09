@@ -17,4 +17,7 @@ return [
      * Requer BROADCAST_CONNECTION=reverb (ou compatível) e `php artisan reverb:start`.
      */
     'broadcast_call_intake' => filter_var(env('OPERATIONS_BROADCAST_CALL_INTAKE', true), FILTER_VALIDATE_BOOL),
+
+    /** User-Agent HTTP nas requisições Nominatim (política OSM). Opcional. */
+    'osm_nominatim_user_agent' => env('OPERATIONS_OSM_NOMINATIM_USER_AGENT', ''),
 ];

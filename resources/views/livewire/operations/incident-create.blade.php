@@ -3,7 +3,7 @@
         <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
                 <flux:heading size="xl">{{ __('Nova ocorrência') }}</flux:heading>
-                <flux:text class="mt-1">{{ __('Cadastro conforme domínio legado (local, solicitante, natureza, tipo de chamada).') }}</flux:text>
+                <flux:text class="mt-1">{{ __('Triagem com tipo de chamada e localização (OpenStreetMap).') }}</flux:text>
             </div>
             @if (! $guest_intake)
                 <div class="flex flex-wrap gap-2">
@@ -14,7 +14,7 @@
         </div>
 
         <flux:callout variant="info">
-            {{ __('O cadastro não vincula a ocorrência a uma base (município). A base é definida no empenho, ao escolher o turno/viatura no CCO.') }}
+            {{ __('O cadastro não vincula a ocorrência a uma base (município). A hora da chamada é a mesma da data/hora da ocorrência.') }}
         </flux:callout>
     @endunless
 
@@ -29,57 +29,135 @@
     @endif
 
     <flux:card>
-        <form wire:submit="save" class="grid gap-4 lg:grid-cols-2">
-            <flux:input wire:model="occurred_at" type="datetime-local" :label="__('Data/hora da ocorrência')" />
-            <flux:input wire:model="call_received_at" type="datetime-local" :label="__('Hora da chamada (opcional)')" />
+        <div class="grid gap-6">
+            <div class="grid gap-4 lg:grid-cols-2">
+                <flux:input wire:model="occurred_at" type="datetime-local" :label="__('Data e hora da ocorrência / chamada')" class="lg:col-span-2" />
 
-            <flux:select wire:model="nature_id" :label="__('Natureza')" placeholder="{{ __('Selecione') }}" class="lg:col-span-2">
-                @foreach ($natures as $n)
-                    <flux:select.option value="{{ $n->id }}">{{ $n->name }}</flux:select.option>
-                @endforeach
-            </flux:select>
+                <flux:input
+                    wire:model="caller_phone"
+                    type="tel"
+                    autocomplete="tel"
+                    :label="__('Telefone')"
+                    description="{{ $embeddedInModal ? __('Pode vir pré-preenchido pela Central.') : __('Obrigatório. Fluxo manual: use «Identificar chamada» antes de abrir este formulário.') }}"
+                />
 
-            <flux:textarea wire:model="description" :label="__('Descrição')" rows="3" class="lg:col-span-2" />
+                <flux:input wire:model="caller_name" :label="__('Solicitante')" />
 
-            <flux:input wire:model="address_line" :label="__('Endereço')" />
-            <flux:input wire:model="number" :label="__('Número')" />
-            <flux:input wire:model="district" :label="__('Bairro')" />
-            <flux:input wire:model="city" :label="__('Cidade')" />
-            <flux:textarea wire:model="reference_notes" :label="__('Referência')" rows="2" class="lg:col-span-2" />
-
-            <flux:input wire:model="caller_name" :label="__('Solicitante')" />
-            <flux:input
-                wire:model="caller_phone"
-                type="tel"
-                autocomplete="tel"
-                :label="__('Telefone da chamada')"
-                description="{{ $embeddedInModal ? __('Pré-preenchido pela chamada recebida na Central.') : __('Obrigatório. Na entrada manual use primeiro «Identificar chamada»; por webhook o número vem pré-preenchido.') }}"
-            />
-
-            <flux:input wire:model="patient_name" :label="__('Paciente (nome)')" />
-            <flux:input wire:model.number="patient_age" type="number" :label="__('Idade')" />
-            <flux:input wire:model="patient_sex" :label="__('Sexo')" />
-
-            <flux:select wire:model="patient_call_type" :label="__('Tipo de chamada')">
-                @foreach ($callTypes as $ct)
-                    <flux:select.option value="{{ $ct->value }}">{{ $ct->label() }}</flux:select.option>
-                @endforeach
-            </flux:select>
-
-            <flux:input wire:model.number="expected_victim_total" type="number" :label="__('Total de vítimas (estimado)')" />
-
-            <flux:input wire:model="latitude" :label="__('Latitude')" />
-            <flux:input wire:model="longitude" :label="__('Longitude')" />
-
-            <flux:input wire:model.number="total_death_count" type="number" :label="__('Óbitos (total)')" />
-
-            <div class="flex items-center gap-2 lg:col-span-2">
-                <flux:checkbox wire:model.boolean="is_qta" :label="__('QTA (sem atendimento / flag operacional)')" />
+                <flux:textarea wire:model="description" :label="__('Descrição')" rows="4" class="lg:col-span-2" />
             </div>
 
-            <div class="lg:col-span-2">
-                <flux:button type="submit" variant="primary" wire:loading.attr="disabled">{{ __('Registrar ocorrência') }}</flux:button>
+            <div class="border-t border-slate-200/90 pt-6 dark:border-slate-700/60">
+                <flux:heading size="sm" class="mb-3">{{ __('Endereço e mapa') }}</flux:heading>
+                <flux:text size="sm" class="mb-4 text-slate-600 dark:text-slate-400">
+                    {{ __('Busca via OpenStreetMap (Nominatim). Arraste o marcador ou clique no mapa para ajustar coordenadas.') }}
+                </flux:text>
+
+                <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+                    <div class="min-w-0 flex-1">
+                        <flux:input
+                            wire:model="addressGeocodeQuery"
+                            :label="__('Buscar endereço')"
+                            placeholder="{{ __('Ex.: Asa Sul, Brasília — DF') }}"
+                            @keydown.enter.prevent="$wire.geocodeAddressSearch()"
+                        />
+                    </div>
+                    <flux:button type="button" variant="ghost" wire:click="geocodeAddressSearch" wire:loading.attr="disabled">
+                        {{ __('Buscar no mapa') }}
+                    </flux:button>
+                </div>
+                @error('addressGeocodeQuery')
+                    <flux:callout variant="danger" class="mb-4">{{ $message }}</flux:callout>
+                @enderror
+
+                <div class="grid gap-4 lg:grid-cols-2">
+                    <flux:input wire:model="address_line" :label="__('Logradouro / endereço')" />
+                    <flux:input wire:model="number" :label="__('Número')" />
+                    <flux:input wire:model="district" :label="__('Bairro')" />
+                    <flux:input wire:model="city" :label="__('Cidade')" />
+
+                    <div class="incident-osm-host lg:col-span-2">
+                        <flux:text size="sm" class="mb-2 font-medium">{{ __('Mapa') }}</flux:text>
+                        <div
+                            wire:ignore
+                            class="incident-osm-map h-64 overflow-hidden rounded-xl border border-slate-200/95 bg-slate-50 dark:border-slate-700/70 dark:bg-slate-900/40"
+                            x-data="incidentOsmMap()"
+                            x-init="init()"
+                        >
+                            <div x-ref="mapEl" class="h-full w-full"></div>
+                        </div>
+                        <div class="mt-2 grid gap-2 sm:grid-cols-2">
+                            <flux:input wire:model="latitude" :label="__('Latitude')" readonly />
+                            <flux:input wire:model="longitude" :label="__('Longitude')" readonly />
+                        </div>
+                    </div>
+                </div>
             </div>
-        </form>
+
+            <div class="border-t border-slate-200/90 pt-6 dark:border-slate-700/60">
+                <flux:heading size="sm" class="mb-4">{{ __('Natureza e paciente') }}</flux:heading>
+                <div class="grid gap-4 lg:grid-cols-2">
+                    <flux:select wire:model="nature_id" :label="__('Natureza')" placeholder="{{ __('Selecione') }}" class="lg:col-span-2">
+                        @foreach ($natures as $n)
+                            <flux:select.option value="{{ $n->id }}">{{ $n->name }}</flux:select.option>
+                        @endforeach
+                    </flux:select>
+
+                    <flux:input wire:model="patient_name" :label="__('Nome do paciente')" />
+                    <flux:input wire:model.number="patient_age" type="number" :label="__('Idade')" />
+
+                    <flux:select wire:model="patient_sex" :label="__('Sexo')" placeholder="{{ __('Opcional') }}" class="lg:col-span-2">
+                        <flux:select.option value="">{{ __('—') }}</flux:select.option>
+                        <flux:select.option value="M">{{ __('Masculino') }}</flux:select.option>
+                        <flux:select.option value="F">{{ __('Feminino') }}</flux:select.option>
+                        <flux:select.option value="O">{{ __('Outro') }}</flux:select.option>
+                    </flux:select>
+                </div>
+            </div>
+
+            <div class="border-t border-slate-200/90 pt-6 dark:border-slate-700/60">
+                <flux:heading size="sm" class="mb-4">{{ __('Demais informações') }}</flux:heading>
+                <div class="grid gap-4 lg:grid-cols-2">
+                    <flux:textarea wire:model="reference_notes" :label="__('Referência')" rows="2" class="lg:col-span-2" />
+
+                    <flux:input wire:model.number="expected_victim_total" type="number" :label="__('Total de vítimas (estimado)')" />
+                    <flux:input wire:model.number="total_death_count" type="number" :label="__('Óbitos (total)')" />
+
+                    <div class="flex items-center gap-2 lg:col-span-2">
+                        <flux:checkbox wire:model.boolean="is_qta" :label="__('QTA (sem atendimento / flag operacional)')" />
+                    </div>
+                </div>
+            </div>
+
+            <div class="border-t border-slate-200/95 pt-6 dark:border-slate-700/60">
+                <flux:heading size="sm" class="mb-2">{{ __('Tipo de chamada') }}</flux:heading>
+                <flux:text size="sm" class="mb-4 text-slate-600 dark:text-slate-400 {{ $embeddedInModal ? 'text-end' : '' }}">
+                    {{ __('Escolha uma opção para registrar e encerrar (C / T / A / N / U conforme migração legada).') }}
+                </flux:text>
+
+                <div class="flex flex-wrap justify-end gap-2">
+                    @foreach ($callTypesForButtons as $type)
+                        @php
+                            $callTypeBtnClass = match ($type->value) {
+                                'C' => 'bg-amber-600 hover:bg-amber-700 focus-visible:ring-amber-500',
+                                'T' => 'bg-orange-600 hover:bg-orange-700 focus-visible:ring-orange-500',
+                                'A' => 'bg-sky-600 hover:bg-sky-700 focus-visible:ring-sky-500',
+                                'N' => 'bg-emerald-600 hover:bg-emerald-700 focus-visible:ring-emerald-500',
+                                'U' => 'bg-red-600 hover:bg-red-700 focus-visible:ring-red-500',
+                                default => 'bg-slate-600 hover:bg-slate-700 focus-visible:ring-slate-500',
+                            };
+                        @endphp
+                        <button
+                            type="button"
+                            wire:click="saveWithCallType('{{ $type->value }}')"
+                            wire:loading.attr="disabled"
+                            wire:target="saveWithCallType"
+                            class="inline-flex min-h-10 items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:focus-visible:ring-offset-zinc-900 {{ $callTypeBtnClass }}"
+                        >
+                            {{ $type->label() }}
+                        </button>
+                    @endforeach
+                </div>
+            </div>
+        </div>
     </flux:card>
 </div>
