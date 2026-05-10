@@ -161,6 +161,14 @@
                         </flux:sidebar.item>
                         <flux:sidebar.item
                             icon="squares-2x2"
+                            :href="route('operations.parameters.injury-sites')"
+                            :current="request()->routeIs('operations.parameters.injury-sites')"
+                            wire:navigate
+                        >
+                            {{ __('Local de Ferimento') }}
+                        </flux:sidebar.item>
+                        <flux:sidebar.item
+                            icon="squares-2x2"
                             :href="route('operations.parameters.natures')"
                             :current="request()->routeIs('operations.parameters.natures')"
                             wire:navigate

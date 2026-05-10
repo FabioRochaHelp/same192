@@ -17,6 +17,8 @@ final class TimelineEventLabels
             'incident_closed' => 'Ocorrência encerrada',
             'nurse_report_saved' => 'Relatório de enfermagem registrado',
             'victim_recorded' => 'Registro de vítima atualizado',
+            'prescription_created' => 'Prescrição médica criada',
+            'prescription_approved' => 'Prescrição médica aprovada',
             default => str_replace('_', ' ', $key),
         };
     }

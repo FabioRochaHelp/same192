@@ -98,6 +98,7 @@ class User extends Authenticatable
 
         if ($this->users_type_legacy === 4) {
             $base[] = 'victim.prescribe';
+            $base[] = 'victim.prescription.approve';
         }
 
         if ($this->users_type_legacy === 3) {

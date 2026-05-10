@@ -2,7 +2,9 @@
 
 namespace App\Providers;
 
+use App\Models\Incident;
 use App\Models\User;
+use App\Observers\IncidentObserver;
 use App\Policies\IncidentPolicy;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
@@ -26,6 +28,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Incident::observe(IncidentObserver::class);
+
         Gate::define('createOperational', function (?User $user, ?int $municipioId = null): bool {
             if ($user === null) {
                 return false;

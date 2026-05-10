@@ -1,5 +1,6 @@
 @php
     use App\Domain\Operations\Enums\IncidentStatus;
+    use App\Models\Prescription;
     use App\Support\Operations\TimelineEventLabels;
 
     $statusBadgeColor = match ($incident->status) {
@@ -84,11 +85,33 @@
                                 @endif
                             </flux:text>
                         </div>
-                        @can('update', $v)
-                            <flux:button size="sm" variant="ghost" :href="route('operations.incidents.victims.edit', [$incident, $v])" wire:navigate>
-                                {{ __('Editar') }}
-                            </flux:button>
-                        @endcan
+                        <div class="flex flex-wrap gap-2">
+                            @can('create', [Prescription::class, $v])
+                                <flux:button size="sm" variant="ghost" :href="route('operations.victims.prescriptions.create', $v)" wire:navigate>
+                                    {{ __('Prescrever') }}
+                                </flux:button>
+                            @endcan
+                            @can('update', $v)
+                                <flux:button size="sm" variant="ghost" :href="route('operations.incidents.victims.edit', [$incident, $v])" wire:navigate>
+                                    {{ __('Editar') }}
+                                </flux:button>
+                            @endcan
+                        </div>
+                        @if ($v->prescriptions->isNotEmpty())
+                            <div class="basis-full ps-0 md:ps-4">
+                                <ul class="mt-2 space-y-1">
+                                    @foreach ($v->prescriptions as $prescription)
+                                        <li wire:key="prescription-{{ $prescription->id }}" class="flex flex-wrap items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
+                                            <span>{{ __('Prescrição #:id', ['id' => $prescription->id]) }}</span>
+                                            <flux:badge size="sm" color="{{ $prescription->status->value === 'approved' ? 'green' : 'amber' }}">{{ $prescription->status->label() }}</flux:badge>
+                                            <a class="text-blue-600 hover:underline dark:text-blue-400" href="{{ route('operations.prescriptions.approval', $prescription) }}" wire:navigate>
+                                                {{ __('ver validação') }}
+                                            </a>
+                                        </li>
+                                    @endforeach
+                                </ul>
+                            </div>
+                        @endif
                     </li>
                 @endforeach
             </ul>

@@ -25,12 +25,24 @@ enum CallType: string
     public function label(): string
     {
         return match ($this) {
-            self::NotCompleted => __('Chamada incompleta'),
-            self::Administrative => __('Administrativa'),
+            self::NotCompleted => __('Chamada não completada'),
+            self::Administrative => __('Administrativo'),
             self::Hoax => __('Trote'),
             self::Normal => __('Normal'),
             self::Urgent => __('Urgente'),
         };
+    }
+
+    /** Ordem no painel / indicadores (C, T, A, N, U). */
+    public static function orderedForDashboard(): array
+    {
+        return [
+            self::NotCompleted,
+            self::Hoax,
+            self::Administrative,
+            self::Normal,
+            self::Urgent,
+        ];
     }
 
     /** Ordem dos botões no formulário: C, T, A, N, U (@see docs/migracao/regras-negocio.md). */

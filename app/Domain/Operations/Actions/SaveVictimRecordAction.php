@@ -5,9 +5,12 @@ declare(strict_types=1);
 namespace App\Domain\Operations\Actions;
 
 use App\Domain\Operations\Services\IncidentTimelineRecorder;
+use App\Domain\Operations\Support\InjuryMatrixDefinition;
 use App\Models\Incident;
+use App\Models\InjurySite;
 use App\Models\User;
 use App\Models\Victim;
+use App\Models\VictimInjuryMatrixEntry;
 use App\Models\VictimVitalSign;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
@@ -61,6 +64,33 @@ final class SaveVictimRecordAction
             $victim->accessories()->sync($accessoryIds);
             $victim->injurySites()->sync($injurySiteIds);
 
+            VictimInjuryMatrixEntry::query()->where('victim_id', $victim->id)->delete();
+            foreach ($injurySiteIds as $injurySiteId) {
+                $site = InjurySite::query()->find($injurySiteId);
+                if ($site === null) {
+                    continue;
+                }
+
+                $region = $site->matrix_region;
+                $lesion = $site->matrix_lesion;
+                if ($region === null || $lesion === null) {
+                    $inferred = InjuryMatrixDefinition::inferMatrixFromName((string) $site->name);
+                    $region = $inferred['matrix_region'];
+                    $lesion = $inferred['matrix_lesion'];
+                }
+
+                if ($region === null || $lesion === null) {
+                    continue;
+                }
+
+                VictimInjuryMatrixEntry::query()->create([
+                    'victim_id' => $victim->id,
+                    'matrix_region' => $region,
+                    'matrix_lesion' => $lesion,
+                    'injury_site_id' => $site->id,
+                ]);
+            }
+
             $victim->vitalSigns()->delete();
             foreach ($vitalRows as $row) {
                 if (($row['recorded_at'] ?? '') === '') {
@@ -75,6 +105,10 @@ final class SaveVictimRecordAction
                     'respiratory_rate' => $this->nullableInt($row['respiratory_rate'] ?? null),
                     'spo2' => $this->nullableInt($row['spo2'] ?? null),
                     'temperature' => $this->nullableDecimal($row['temperature'] ?? null),
+                    'blood_glucose' => $this->nullableInt($row['blood_glucose'] ?? null),
+                    'glasgow_eye' => $this->nullableInt($row['glasgow_eye'] ?? null),
+                    'glasgow_verbal' => $this->nullableInt($row['glasgow_verbal'] ?? null),
+                    'glasgow_motor' => $this->nullableInt($row['glasgow_motor'] ?? null),
                     'glasgow_total' => $this->nullableInt($row['glasgow_total'] ?? null),
                     'neurological_notes' => $this->nullableString($row['neurological_notes'] ?? null),
                     'dominant_side' => $this->nullableDominant($row['dominant_side'] ?? null),

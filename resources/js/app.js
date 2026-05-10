@@ -22,6 +22,8 @@ const host = resolveReverbHost();
 
 let operationalCallIntakeEchoBound = false;
 
+let dashboardCallStatsEchoBound = false;
+
 /** Echo/Reverb pode entregar `data` como string JSON ou objeto aninhado em `.data`. */
 function normalizeOperationalCallIntakeBroadcast(raw) {
     let p = raw;
@@ -97,6 +99,31 @@ function subscribeOperationalCallIntake() {
     });
 }
 
+function subscribeDashboardCallStats() {
+    const body = document.body;
+    if (!body?.dataset?.broadcastOperations || body.dataset.broadcastOperations !== '1') {
+        return;
+    }
+    if (!window.Echo) {
+        return;
+    }
+    if (dashboardCallStatsEchoBound) {
+        return;
+    }
+    dashboardCallStatsEchoBound = true;
+
+    const refreshDashboardCallStats = () => {
+        const Livewire = window.Livewire;
+        if (!Livewire || typeof Livewire.dispatch !== 'function') {
+            return;
+        }
+        Livewire.dispatch('dashboard-call-stats-refresh');
+    };
+
+    window.Echo.private('operations.dispatch').listen('.incident.created', refreshDashboardCallStats);
+    window.Echo.private('operations.dispatch').listen('.dashboard.call-stats-invalidate', refreshDashboardCallStats);
+}
+
 if (key) {
     const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
 
@@ -120,4 +147,5 @@ if (key) {
 
     // Inscreve assim que o Echo existe (não depende de livewire:init; o handler só usa Livewire quando o evento chega).
     subscribeOperationalCallIntake();
+    subscribeDashboardCallStats();
 }

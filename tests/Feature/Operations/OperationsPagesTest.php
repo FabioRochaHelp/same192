@@ -10,6 +10,7 @@ $operationsParameterRouteNames = [
     'operations.parameters.accessories',
     'operations.parameters.operational-supports',
     'operations.parameters.care-locals',
+    'operations.parameters.injury-sites',
     'operations.parameters.natures',
     'operations.parameters.procedures',
     'operations.parameters.victim-types',

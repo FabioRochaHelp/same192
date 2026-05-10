@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Database\Seeders;
 
 use App\Domain\Operations\Enums\ShiftStatus;
+use App\Domain\Operations\Support\InjuryMatrixDefinition;
 use App\Models\Accessory;
 use App\Models\CareLocal;
 use App\Models\InjurySite;
@@ -55,8 +56,14 @@ class OperationalDemoSeeder extends Seeder
         Procedure::query()->firstOrCreate(['name' => 'Acesso venoso periférico']);
         Accessory::query()->firstOrCreate(['name' => 'Colar cervical']);
         Accessory::query()->firstOrCreate(['name' => 'Kit trauma']);
-        InjurySite::query()->firstOrCreate(['name' => 'Membro superior direito']);
-        InjurySite::query()->firstOrCreate(['name' => 'Tórax anterior']);
+        foreach (InjuryMatrixDefinition::BODY_REGIONS as $region) {
+            foreach (InjuryMatrixDefinition::LESION_TYPES as $lesion) {
+                InjurySite::query()->updateOrCreate(
+                    ['name' => $region.' - '.$lesion],
+                    ['matrix_region' => $region, 'matrix_lesion' => $lesion],
+                );
+            }
+        }
         CareLocal::query()->firstOrCreate(['name' => 'Via pública']);
 
         $vehicle = Vehicle::query()->create([
@@ -78,7 +85,7 @@ class OperationalDemoSeeder extends Seeder
             'status_legacy' => 1,
         ]);
 
-        Staff::query()->create([
+        $medicalStaff = Staff::query()->create([
             'municipio_id' => $municipio->id,
             'name' => 'Médico demonstração',
             'document_type' => 'CRM',
@@ -114,6 +121,16 @@ class OperationalDemoSeeder extends Seeder
             'municipio_id' => $municipio->id,
             'user_type_id' => $typeMunicipal->id,
             'users_type_legacy' => 3,
+        ]);
+
+        User::factory()->create([
+            'name' => 'Médico regulador',
+            'email' => 'medico@example.com',
+            'password' => 'password',
+            'municipio_id' => $municipio->id,
+            'user_type_id' => $typeMunicipal->id,
+            'staff_id' => $medicalStaff->id,
+            'users_type_legacy' => 4,
         ]);
     }
 }
